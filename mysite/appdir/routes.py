@@ -6,4 +6,4 @@ from appdir import app
 @app.route('/')
 @app.route('/index')
 def index():
-    return render_template("index.html", user="<USERNAME>")
+    return render_template("index.html", user="Grant")
