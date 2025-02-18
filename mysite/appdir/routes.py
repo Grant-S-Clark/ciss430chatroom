@@ -10,7 +10,7 @@ import random
 random.seed()
 
 sys.path.append("appdir")
-from constants import PYMYSQL_USER, PYMYSQL_PASS
+from constants import *
 
 @app.route('/')
 @app.route('/index')
@@ -19,7 +19,8 @@ def index():
         return redirect(url_for('login'))
     else:
         return render_template('index.html',
-                               user = (session['user_id'] if 'user_id' in session else -1))
+                               user = (session['user_id'] if 'user_id' in session else -1),
+                               username = (session['username'] if 'username' in session else ''))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -30,9 +31,9 @@ def login():
 
     # Prompt user to log in.
     if request.method == 'GET':
-        print("BASE LOGIN")
         return render_template('login.html',
-                               user = (session['user_id'] if 'user_id' in session else -1))
+                               user = (session['user_id'] if 'user_id' in session else -1),
+                               username = (session['username'] if 'username' in session else ''))
 
     # Verify login attempt
     else:
@@ -41,7 +42,10 @@ def login():
 
         print("ATTEMPTING DATABASE")
         # Open database and request information
-        conn = pymysql.connect(user=PYMYSQL_USER, passwd=PYMYSQL_PASS, db='ciss430chatroom')
+        conn = pymysql.connect(user=PYMYSQL_USER,
+                               passwd=PYMYSQL_PASS,
+                               db=DB_NAME,
+                               host=DB_HOST)
         cur = conn.cursor(pymysql.cursors.DictCursor)
         cur.execute('SELECT salt FROM users WHERE username=%s', (username))
         ret = cur.fetchone()
@@ -62,9 +66,12 @@ def login():
             password = hashlib.sha256(password.encode()).hexdigest()
 
         # Verify
-        conn = pymysql.connect(user=PYMYSQL_USER, passwd=PYMYSQL_PASS, db='ciss430chatroom')
+        conn = pymysql.connect(user=PYMYSQL_USER,
+                               passwd=PYMYSQL_PASS,
+                               db=DB_NAME,
+                               host=DB_HOST)
         cur = conn.cursor(pymysql.cursors.DictCursor)
-        cur.execute('SELECT id, hpassword FROM users WHERE username=%s', (username))
+        cur.execute('SELECT id, username, hpassword FROM users WHERE username=%s', (username))
         ret = cur.fetchone()
         cur.close()
         conn.close()
@@ -72,6 +79,7 @@ def login():
         # Password matches
         if password == ret['hpassword']:
             session['user_id'] = ret['id']
+            session['username'] = ret['username']
             return redirect(url_for('index'))
         
         # Password failed to match
@@ -87,7 +95,8 @@ def register():
 
     if request.method == 'GET':
         return render_template('register.html',
-                               user = (session['user_id'] if 'user_id' in session else -1))
+                               user = (session['user_id'] if 'user_id' in session else -1),
+                               username = (session['username'] if 'username' in session else ''))
 
     else:
         username = request.form['username']
@@ -96,7 +105,10 @@ def register():
         confirm_password = request.form['confirm_password']
 
         # Open database and request information
-        conn = pymysql.connect(user=PYMYSQL_USER, passwd=PYMYSQL_PASS, db='ciss430chatroom')
+        conn = pymysql.connect(user=PYMYSQL_USER,
+                               passwd=PYMYSQL_PASS,
+                               db=DB_NAME,
+                               host=DB_HOST)
         cur = conn.cursor(pymysql.cursors.DictCursor)
         cur.execute('SELECT id FROM users WHERE username=%s', (username))
         ret = cur.fetchone()
@@ -127,7 +139,10 @@ def register():
             password = hashlib.sha256(password.encode()).hexdigest()
             
         # Open database to insert data
-        conn = pymysql.connect(user=PYMYSQL_USER, passwd=PYMYSQL_PASS, db='ciss430chatroom')
+        conn = pymysql.connect(user=PYMYSQL_USER,
+                               passwd=PYMYSQL_PASS,
+                               db=DB_NAME,
+                               host=DB_HOST)
         cur = conn.cursor(pymysql.cursors.DictCursor)
         cur.execute('INSERT users (email, username, salt, hpassword) VALUES (%s, %s, %s, %s)',
                     (email, username, salt, password))
@@ -138,6 +153,7 @@ def register():
         conn.close()
 
         session['user_id'] = ret['id']
+        session['username'] = username
         
         flash("Registration successful")
         return redirect(url_for('index'))
