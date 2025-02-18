@@ -9,7 +9,8 @@ import string
 import random
 random.seed()
 
-sys.path.append("appdir")
+# sys.path.append("mysite/appdir") # PYTHONANYWHERE
+sys.path.append("appdir") # LOCAL
 from constants import *
 
 @app.route('/')

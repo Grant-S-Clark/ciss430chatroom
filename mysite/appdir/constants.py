@@ -4,10 +4,11 @@ PYMYSQL_PASS = 'root'
 DB_NAME = 'ciss430chatroom'
 DB_HOST = None
 
+
 # CONSTANTS FOR PYTHONANYWHERE
 """
 PYMYSQL_USER = 'ciss430chatroom'
-PYMYSQL_PASS = 'InterestingPassword21!'
+PYMYSQL_PASS = 'DatabaseRootPass42!'
 DB_NAME = 'ciss430chatroom$default'
 DB_HOST = 'ciss430chatroom.mysql.pythonanywhere-services.com'
 """
