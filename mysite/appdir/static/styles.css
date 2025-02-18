@@ -5,3 +5,10 @@
   background: #555;
   color: #f1f1f1;
 }
+
+.auth-link {
+    color: white;
+    font-size:16px;
+    padding: 5px 10px;
+    border-radius: 5px;
+}

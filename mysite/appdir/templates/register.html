@@ -14,31 +14,39 @@
   </div>
 
   <body>
-    <h3>Enter account information:</h3>
-    
-    <form action="login" method="POST">
+    <h3>Register:</h3>
+    <form action="register" method="post">
       
-      {%with messages = get_flashed_messages()%}
-      {%if messages%}
-      {%for message in messages%}
+      {% with messages = get_flashed_messages()%}
+      {% if messages%}
+      {% for message in messages%}
       <p style="color:red">{{message}}</p>
       {%endfor%}
       {%endif%}
       {%endwith%}
-      
+    
       Username:
       <br>
       <input name="username" required>
+      <br>
+
+      Email:
+      <br>
+      <input type="email" name="email" required>
       <br>
       
       Password: <br>
       <input type="password" name="password" required>
       <br>
 
-      Don't have an account? <a href="register">Register</a>.
+      Confirm Password: <br>
+      <input type="password" name="confirm_password" required>
+      <br>
+
+      Already have an account? <a href="login">Login</a>.
       <br>
       
-      <button type="submit">Login</button>
+      <button type="submit">Register</button>
     </form>
   </body>
 </html>
