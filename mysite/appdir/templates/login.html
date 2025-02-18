@@ -1,35 +1,14 @@
 <!-- login.html -->
 <html>
-  <head>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <title>CISS430 Chatroom</title>
-  </head>
-  
-  <div class="header" id="myHeader">
-    <h1>
-      <a href="/" style="text-decoration:none;color:white">CISS430 Chatroom</a>
-    </h1>
-    
-    {% if user >= 0 %}
-        <a href="logout" class="auth-link">Logout</a>
-    {% else %}
-        <a href="login" class="auth-link">Login</a>
-    {% endif %}
-  </div>
+
+  {% include 'header.html' %}
 
   <body>
     <h3>Enter account information:</h3>
     
     <form action="login" method="POST">
 
-      <!-- Flash messages -->
-      {% with messages = get_flashed_messages() %}
-          {% if messages %}
-              {% for message in messages %}
-                  <p style="color:red">{{message}}</p>
-              {% endfor %}
-          {% endif %}
-      {% endwith %}
+      {% include 'flash_handler.html' %}
       
       Username:
       <br>

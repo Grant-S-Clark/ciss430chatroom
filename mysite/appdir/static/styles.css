@@ -12,3 +12,62 @@
     padding: 5px 10px;
     border-radius: 5px;
 }
+
+.chat-container {
+    width: 50%;
+    height: 400px;
+    border: 2px solid #ccc;
+    border-radius: 10px;
+    padding: 10px;
+    overflow-y: auto; /* Scrollable */
+    display: flex;
+    flex-direction: column;
+    background-color: #f9f9f9;
+}
+
+.message {
+    padding: 8px 12px;
+    margin: 5px;
+    border-radius: 8px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.message.user {
+    background-color: #0084ff;
+    color: white;
+    align-self: flex-end;
+}
+
+.message.other {
+    background-color: #e0e0e0;
+    color: black;
+    align-self: flex-start;
+}
+
+.message-form {
+    width: 50%;
+    margin-top: 10px;
+    display: flex;
+}
+
+.message-input {
+    flex-grow: 1;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+
+.send-button {
+    margin-left: 10px;
+    padding: 10px;
+    border: none;
+    background-color: #0084ff;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.send-button:hover {
+    background-color: #005bbf;
+}

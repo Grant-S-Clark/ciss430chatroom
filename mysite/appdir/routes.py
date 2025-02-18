@@ -13,15 +13,52 @@ random.seed()
 sys.path.append("appdir") # LOCAL
 from constants import *
 
+# Index will be the global chatroom
 @app.route('/')
-@app.route('/index')
+@app.route('/index', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session: # not logged in
         return redirect(url_for('login'))
     else:
-        return render_template('index.html',
-                               user = (session['user_id'] if 'user_id' in session else -1),
-                               username = (session['username'] if 'username' in session else ''))
+        if request.method == 'GET':
+            conn = pymysql.connect(user=PYMYSQL_USER,
+                                   passwd=PYMYSQL_PASS,
+                                   db=DB_NAME,
+                                   host=DB_HOST)
+            cur = conn.cursor(pymysql.cursors.DictCursor)
+            # Fetch all messages in global chat
+            cur.execute(
+                '''
+                SELECT u.username, g.message, g.time_sent FROM
+                global_chat g
+                JOIN users u ON g.user_id = u.id
+                ORDER BY g.time_sent;
+                '''
+            )
+            ret = cur.fetchall()
+            cur.close()
+            conn.close()
+        
+            return render_template('index.html',
+                                   user = (session['user_id'] if 'user_id' in session else -1),
+                                   username = (session['username'] if 'username' in session else ''),
+                                   messages = ret)
+        # MESSAGE SEND
+        else:
+            message = request.form['message']
+            
+            conn = pymysql.connect(user=PYMYSQL_USER,
+                                   passwd=PYMYSQL_PASS,
+                                   db=DB_NAME,
+                                   host=DB_HOST)
+            cur = conn.cursor(pymysql.cursors.DictCursor)
+            cur.execute("INSERT global_chat (user_id, message) VALUES (%s, %s)",
+                        (session['user_id'], message)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -41,7 +78,6 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-        print("ATTEMPTING DATABASE")
         # Open database and request information
         conn = pymysql.connect(user=PYMYSQL_USER,
                                passwd=PYMYSQL_PASS,
@@ -53,10 +89,8 @@ def login():
         cur.close()
         conn.close()
 
-        # If there is no row with that name, redirect to login to
-        # try again.
+        # If there is no row with that name, redirect to login to try again.
         if ret is None:
-            print("USERNAME FAILURE")
             flash('Unrecognized username.')
             return redirect(url_for('login'))
 

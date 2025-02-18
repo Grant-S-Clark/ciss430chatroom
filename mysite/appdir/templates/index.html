@@ -1,24 +1,36 @@
 <!-- index.html -->
 <html>
-  <head>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <title>CISS430 Chatroom</title>
-  </head>
   
-  <div class="header" id="myHeader">
-    <h1>
-      <a href="/" style="text-decoration:none;color:white">CISS430 Chatroom</a>
-    </h1>
-    
-    {% if user >= 0 %}
-        <a href="logout" class="auth-link">Logout</a>
-    {% else %}
-        <a href="login" class="auth-link">Login</a>
-    {% endif %}
-  </div>
+  {% include 'header.html' %}
+  
   <body>
-    <h1>Homepage</h1>
+    <h1>Global Chat</h1>
+    <br>
 
-    Hello {{ username }}!
+    <div class="chat-container" id="chat-window">
+      {% for msg in messages %}
+      <div class="message {% if msg.username == username %}user{%else%}other{%endif%}">
+        <strong>{{ msg.username }}</strong>: {{ msg.message }}
+        <br>
+        <small>{{ msg.time_sent }}</small>
+      </div>
+      {% endfor %}
+    </div>
+
+    <form class="message-form" action="index" method="POST">
+      <input type="text" name="message" class="message-input" placeholder="Type your message..." required>
+      <button type="submit" class="send-button">Send</button>
+    </form>
+
+    <script>
+      function scroll_to_bottom()
+      {
+          var chat_window = document.getElementById("chat-window");
+          chat_window.scrollTop = chat_window.scrollHeight;
+      }
+      
+      scroll_to_bottom();
+    </script>
+    
   </body>
-</html>
+</html>x
