@@ -11,7 +11,16 @@ random.seed()
 
 # sys.path.append("mysite/appdir") # PYTHONANYWHERE
 sys.path.append("appdir") # LOCAL
-from constants import *
+
+from pymysql_lib import *
+
+ERR_MSG = "An error occurred, please contact system admins."
+
+def handle_error(msg = ERR_MSG):
+    flash(msg)
+    error = db_error
+    db_error = None
+    # LOG ERROR HERE
 
 # Index will be the global chatroom
 @app.route('/')
@@ -21,23 +30,23 @@ def index():
         return redirect(url_for('login'))
     else:
         if request.method == 'GET':
-            conn = pymysql.connect(user=PYMYSQL_USER,
-                                   passwd=PYMYSQL_PASS,
-                                   db=DB_NAME,
-                                   host=DB_HOST)
-            cur = conn.cursor(pymysql.cursors.DictCursor)
-            # Fetch all messages in global chat
-            cur.execute(
-                '''
-                SELECT u.username, g.message, g.time_sent FROM
-                global_chat g
-                JOIN users u ON g.user_id = u.id
-                ORDER BY g.time_sent;
-                '''
-            )
-            ret = cur.fetchall()
-            cur.close()
-            conn.close()
+            conn, cur = db_connect()
+            if conn is None:
+                flash(ERR_MSG)
+                ret = []
+            else:
+                # Fetch all messages in global chat
+                cur.execute(
+                    '''
+                    SELECT u.username, g.message, g.time_sent FROM
+                    global_chat g
+                    JOIN users u ON g.user_id = u.id
+                    ORDER BY g.time_sent;
+                    '''
+                )
+                ret = cur.fetchall()
+                cur.close()
+                conn.close()
         
             return render_template('index.html',
                                    user = (session['user_id'] if 'user_id' in session else -1),
@@ -46,18 +55,18 @@ def index():
         # MESSAGE SEND
         else:
             message = request.form['message']
+
+            conn, cur = db_connect()
+            if conn is None:
+                handle_error()
+            else:
+                cur.execute("INSERT global_chat (user_id, message) VALUES (%s, %s)",
+                            (session['user_id'], message)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
             
-            conn = pymysql.connect(user=PYMYSQL_USER,
-                                   passwd=PYMYSQL_PASS,
-                                   db=DB_NAME,
-                                   host=DB_HOST)
-            cur = conn.cursor(pymysql.cursors.DictCursor)
-            cur.execute("INSERT global_chat (user_id, message) VALUES (%s, %s)",
-                        (session['user_id'], message)
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
             return redirect(url_for('index'))
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -79,11 +88,11 @@ def login():
         password = request.form['password']
 
         # Open database and request information
-        conn = pymysql.connect(user=PYMYSQL_USER,
-                               passwd=PYMYSQL_PASS,
-                               db=DB_NAME,
-                               host=DB_HOST)
-        cur = conn.cursor(pymysql.cursors.DictCursor)
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            return redirect(url_for('login'))
+
         cur.execute('SELECT salt FROM users WHERE username=%s', (username))
         ret = cur.fetchone()
         cur.close()
@@ -99,13 +108,14 @@ def login():
         # Hash
         for i in range(21):
             password = hashlib.sha256(password.encode()).hexdigest()
-
+                
         # Verify
-        conn = pymysql.connect(user=PYMYSQL_USER,
-                               passwd=PYMYSQL_PASS,
-                               db=DB_NAME,
-                               host=DB_HOST)
-        cur = conn.cursor(pymysql.cursors.DictCursor)
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            redirect(url_for('login'))
+
+        # Error checking here?
         cur.execute('SELECT id, username, hpassword FROM users WHERE username=%s', (username))
         ret = cur.fetchone()
         cur.close()
@@ -140,11 +150,11 @@ def register():
         confirm_password = request.form['confirm_password']
 
         # Open database and request information
-        conn = pymysql.connect(user=PYMYSQL_USER,
-                               passwd=PYMYSQL_PASS,
-                               db=DB_NAME,
-                               host=DB_HOST)
-        cur = conn.cursor(pymysql.cursors.DictCursor)
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            return redirect(url_for('register'))
+        
         cur.execute('SELECT id FROM users WHERE username=%s', (username))
         ret = cur.fetchone()
         cur.close()
@@ -174,11 +184,12 @@ def register():
             password = hashlib.sha256(password.encode()).hexdigest()
             
         # Open database to insert data
-        conn = pymysql.connect(user=PYMYSQL_USER,
-                               passwd=PYMYSQL_PASS,
-                               db=DB_NAME,
-                               host=DB_HOST)
-        cur = conn.cursor(pymysql.cursors.DictCursor)
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            return redirect(url_for('register'))
+
+        # Probably do error checking here too.
         cur.execute('INSERT users (email, username, salt, hpassword) VALUES (%s, %s, %s, %s)',
                     (email, username, salt, password))
         conn.commit()

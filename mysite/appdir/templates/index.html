@@ -22,15 +22,18 @@
       <button type="submit" class="send-button">Send</button>
     </form>
 
-    <script>
-      function scroll_to_bottom()
-      {
-          var chat_window = document.getElementById("chat-window");
-          chat_window.scrollTop = chat_window.scrollHeight;
-      }
-      
-      scroll_to_bottom();
-    </script>
+    {% include 'flash_handler.html' %}
     
   </body>
-</html>x
+</html>
+
+<!-- Scroll function for text box -->
+<script>
+  function scroll_to_bottom()
+  {
+      var chat_window = document.getElementById("chat-window");
+      chat_window.scrollTop = chat_window.scrollHeight;
+  }
+  
+  scroll_to_bottom();
+</script>
