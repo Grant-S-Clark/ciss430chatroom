@@ -1,12 +1,17 @@
 # File: routes.py
 
+# Need to switch all tuples of single values to have a comma at the end...
+
 import sys
 from flask import render_template, session, redirect, url_for, flash, request
-from appdir import app
+from flask_socketio import emit
+from appdir import app, socketio
 import pymysql
 import hashlib
 import string
 import random
+from datetime import datetime
+
 random.seed()
 
 # sys.path.append("mysite/appdir") # PYTHONANYWHERE
@@ -16,6 +21,7 @@ from pymysql_lib import *
 
 ERR_MSG = "An error occurred, please contact system admins."
 
+# probably switch this to use the logging library
 def handle_error(msg = ERR_MSG):
     flash(msg)
     error = db_error
@@ -24,50 +30,64 @@ def handle_error(msg = ERR_MSG):
 
 # Index will be the global chatroom
 @app.route('/')
-@app.route('/index', methods=['GET', 'POST'])
+@app.route('/index')
 def index():
     if 'user_id' not in session: # not logged in
         return redirect(url_for('login'))
+    
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        ret = []
     else:
-        if request.method == 'GET':
-            conn, cur = db_connect()
-            if conn is None:
-                flash(ERR_MSG)
-                ret = []
-            else:
-                # Fetch all messages in global chat
-                cur.execute(
-                    '''
-                    SELECT u.username, g.message, g.time_sent FROM
-                    global_chat g
-                    JOIN users u ON g.user_id = u.id
-                    ORDER BY g.time_sent;
-                    '''
-                )
-                ret = cur.fetchall()
-                cur.close()
-                conn.close()
-        
-            return render_template('index.html',
-                                   user = (session['user_id'] if 'user_id' in session else -1),
-                                   username = (session['username'] if 'username' in session else ''),
-                                   messages = ret)
-        # MESSAGE SEND
-        else:
-            message = request.form['message']
+        # Fetch all messages in global chat
+        cur.execute(
+            '''
+            SELECT u.username, g.message, g.time_sent FROM
+            global_chat g
+            JOIN users u ON g.user_id = u.id
+            ORDER BY g.time_sent;
+            '''
+        )
+        ret = cur.fetchall()
+        cur.close()
+        conn.close()
+                
+    return render_template('index.html',
+                           user = (session['user_id'] if 'user_id' in session else -1),
+                           username = (session['username'] if 'username' in session else ''),
+                           messages = ret)
 
-            conn, cur = db_connect()
-            if conn is None:
-                handle_error()
-            else:
-                cur.execute("INSERT global_chat (user_id, message) VALUES (%s, %s)",
-                            (session['user_id'], message)
-                )
-                conn.commit()
-                cur.close()
-                conn.close()
-            
-            return redirect(url_for('index'))
+
+@socketio.on('send_message')
+def handle_message_send(data):
+    if 'user_id' not in session:
+        return
+
+    user_id = session['user_id']
+    username = session['username']
+    message = data['message']
+
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+    else:
+        cur.execute("INSERT INTO global_chat (user_id, message) VALUES (%s, %s)",
+                    (user_id, message))
+        conn.commit()
+
+        cur.execute("SELECT time_sent FROM global_chat WHERE user_id=%s ORDER BY time_sent DESC LIMIT 1",
+                    (user_id,))
+        res = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        # Have to format it due to JSON serialization issues with
+        # the javascript
+        time_sent = res['time_sent'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Broadcast the message to connected users
+        emit('receive_message', {'username': username, 'message': message, 'time_sent': time_sent}, broadcast=True)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
