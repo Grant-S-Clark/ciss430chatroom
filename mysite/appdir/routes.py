@@ -14,7 +14,7 @@ from datetime import datetime
 
 random.seed()
 
-# sys.path.append("mysite/appdir") # PYTHONANYWHERE
+# sys.path.append("mysite/appdir") # PYTHONANYWHERE (Remove this?)
 sys.path.append("appdir") # LOCAL
 
 from pymysql_lib import *
@@ -31,7 +31,7 @@ def handle_error(msg = ERR_MSG):
 # Index will be the global chatroom
 @app.route('/')
 @app.route('/index')
-def index():
+def index(data = None):
     if 'user_id' not in session: # not logged in
         return redirect(url_for('login'))
     
@@ -40,23 +40,43 @@ def index():
         handle_error()
         ret = []
     else:
-        # Fetch all messages in global chat
+        session['chat_id'] = 1 if data is None else data['chat_id']
+
+        # Make sure they are allowed to be in this chatroom.
+        # Dont bother for global chat though, but redirect the user
+        # to the global chat if they are not allowed in this chatroom.
+        if session['chat_id'] != 1:
+            cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                        (session['chat_id'], session['user_id']))
+            # If they do not have permission to be in that chatroom, redirect to global chat.
+            if cur.fetchone() is None:
+                flash("Error: You do not have permission to access that chatroom.")
+                session['chat_id'] = 1
+        # Fetch the label of the chatroom (i.e. the name for display)
+        cur.execute("SELECT label FROM chats WHERE id = %s", (session['chat_id'],))
+        label = cur.fetchone()['label']
+        
+        # Fetch all messages in chatroom
         cur.execute(
             '''
-            SELECT u.username, g.message, g.time_sent FROM
-            global_chat g
-            JOIN users u ON g.user_id = u.id
-            ORDER BY g.time_sent;
-            '''
+            SELECT u.username, m.message, m.time_sent, c.label FROM
+            messages m
+            JOIN users u ON m.user_id = u.id
+            JOIN chats c ON m.chat_id = %s
+            ORDER BY m.time_sent;
+            ''',
+            (session['chat_id'],)
         )
         ret = cur.fetchall()
         cur.close()
         conn.close()
                 
     return render_template('index.html',
-                           user = (session['user_id'] if 'user_id' in session else -1),
                            username = (session['username'] if 'username' in session else ''),
-                           messages = ret)
+                           user_id = (session['user_id'] if 'user_id' in session else -1),
+                           messages = ret,
+                           chat_label = label,
+                           chat_id = (session['chat_id'] if 'chat_id' in session else -1))
 
 
 @socketio.on('send_message')
@@ -67,17 +87,18 @@ def handle_message_send(data):
     user_id = session['user_id']
     username = session['username']
     message = data['message']
+    chat_id = data['chat_id']
 
     conn, cur = db_connect()
     if conn is None:
         handle_error()
     else:
-        cur.execute("INSERT INTO global_chat (user_id, message) VALUES (%s, %s)",
-                    (user_id, message))
+        cur.execute("INSERT INTO messages (user_id, chat_id, message) VALUES (%s, %s, %s)",
+                    (user_id, chat_id, message))
         conn.commit()
 
-        cur.execute("SELECT time_sent FROM global_chat WHERE user_id=%s ORDER BY time_sent DESC LIMIT 1",
-                    (user_id,))
+        cur.execute("SELECT time_sent FROM messages WHERE user_id=%s AND chat_id=%s ORDER BY time_sent DESC LIMIT 1",
+                    (user_id, chat_id))
         res = cur.fetchone()
         cur.close()
         conn.close()
@@ -87,7 +108,12 @@ def handle_message_send(data):
         time_sent = res['time_sent'].strftime("%Y-%m-%d %H:%M:%S")
         
         # Broadcast the message to connected users
-        emit('receive_message', {'username': username, 'message': message, 'time_sent': time_sent}, broadcast=True)
+        emit('receive_message',
+             {'username': username,
+              'message': message,
+              'time_sent': time_sent
+             },
+             broadcast=True)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -99,7 +125,7 @@ def login():
     # Prompt user to log in.
     if request.method == 'GET':
         return render_template('login.html',
-                               user = (session['user_id'] if 'user_id' in session else -1),
+                               user_id = (session['user_id'] if 'user_id' in session else -1),
                                username = (session['username'] if 'username' in session else ''))
 
     # Verify login attempt
@@ -160,7 +186,7 @@ def register():
 
     if request.method == 'GET':
         return render_template('register.html',
-                               user = (session['user_id'] if 'user_id' in session else -1),
+                               user_id = (session['user_id'] if 'user_id' in session else -1),
                                username = (session['username'] if 'username' in session else ''))
 
     else:

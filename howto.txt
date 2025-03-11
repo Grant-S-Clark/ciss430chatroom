@@ -1,0 +1,14 @@
+To create venv:
+   create a folder
+   "python3 -m venv venv"
+   activate
+   "pip install --upgrade pip"
+   "pip install flask"
+   Then copy the "mysite" folder structure
+   
+To activate venv:
+   go into website's main folder
+   "source venv/bin/activate"
+   
+To deactivate:
+   "deactivate"

@@ -21,16 +21,38 @@ PRIMARY KEY (id),
 KEY (username)
 ) engine=innodb;
 
--- temporary, later make this more fleshed out, add file upload,
--- images, allow for DMs, allow for group chats, etc...
--- Maybe make a messages table? Would need to make the id into a
--- bigint though to make sure we dont overflow the id count.
-CREATE TABLE global_chat (
-id           INT         AUTO_INCREMENT,
-user_id      INT         NOT NULL,
-message      TEXT        NOT NULL,
-time_sent    TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+-- Add chat pictures later?
+CREATE TABLE chats (
+id     INT   AUTO_INCREMENT,
+label  VARCHAR(200) NOT NULL,
+
+PRIMARY KEY (id)
+) engine=innodb;
+
+-- Set up global chat by default, id for global is 1.
+ALTER TABLE chats AUTO_INCREMENT = 1;
+INSERT chats (label) VALUES ('Global Chat');
+
+-- Access permissions for non-global chats.
+CREATE TABLE chat_users (
+chat_id      INT        NOT NULL,
+user_id      INT        NOT NULL,
+
+FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+FOREIGN KEY (user_id) REFERENCES chats(id) ON DELETE CASCADE
+) engine=innodb;
+
+-- Maybe bigint for id so we dont overflow the id count with a
+-- huge number of messages?
+CREATE TABLE messages (
+id     INT   AUTO_INCREMENT,
+user_id      INT,      -- NULL will mean a system message later on.
+chat_id      INT       NOT NULL,
+message      TEXT      NOT NULL,  -- Allow null later for messages with
+                                  -- no text but have a file
+time_sent    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
 PRIMARY KEY (id),
-FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 ) engine=innodb;

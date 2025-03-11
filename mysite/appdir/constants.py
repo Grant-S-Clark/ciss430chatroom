@@ -5,7 +5,7 @@ DB_NAME = 'ciss430chatroom'
 DB_HOST = None
 
 
-# CONSTANTS FOR PYTHONANYWHERE
+# CONSTANTS FOR PYTHONANYWHERE (Useless now?)
 """
 PYMYSQL_USER = 'ciss430chatroom'
 PYMYSQL_PASS = 'DatabaseRootPass42!'

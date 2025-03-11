@@ -4,7 +4,7 @@
   {% include 'header.html' %}
   
   <body>
-    <h1>Global Chat</h1>
+    <h1>{{ chat_label }}</h1>
     <br>
 
     <div class="chat-container" id="chat-window">
@@ -51,8 +51,9 @@
       e.preventDefault();
       var messageInput = document.querySelector(".message-input");
       var message = messageInput.value.trim();
+      var chatId = parseInt("{{ chat_id|safe }}")
       if (message) {
-          socket.emit("send_message", { message: message });
+          socket.emit("send_message", { message: message, chat_id : chatId });
           messageInput.value = "";
       }
   });
