@@ -3,7 +3,6 @@ DROP DATABASE IF EXISTS ciss430chatroom;
 CREATE DATABASE ciss430chatroom;
 USE ciss430chatroom;
 
-
 /*
 -- PYTHONANYWHERE
 DROP DATABASE IF EXISTS ciss430chatroom$default;

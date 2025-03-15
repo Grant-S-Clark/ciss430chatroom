@@ -39,9 +39,14 @@ def index(data = None):
     if conn is None:
         handle_error()
         ret = []
+        chat_label = ""
+        chatrooms = []
+        
     else:
+        # Set the current session chat id to either the chat trying to be accessed
+        # or the global chat id if there is not a chat id
         session['chat_id'] = 1 if data is None else data['chat_id']
-
+        
         # Make sure they are allowed to be in this chatroom.
         # Dont bother for global chat though, but redirect the user
         # to the global chat if they are not allowed in this chatroom.
@@ -52,7 +57,23 @@ def index(data = None):
             if cur.fetchone() is None:
                 flash("Error: You do not have permission to access that chatroom.")
                 session['chat_id'] = 1
-        # Fetch the label of the chatroom (i.e. the name for display)
+
+        # Fetch all chatrooms that the user has access to (and grab global because
+        # everyone has it).
+        cur.execute(
+        """
+        SELECT chats.id, chats.label
+        FROM chats
+        LEFT JOIN chat_users ON chats.id = chat_users.chat_id
+        WHERE chats.id = 1 OR chat_users.user_id = %s
+        """,
+        (session['user_id'],)
+        )
+
+        # SORT THEM BY CHAT_ID LATER
+        chatrooms = cur.fetchall()
+                
+        # Fetch the label of the current chatroom (i.e. the name for display)
         cur.execute("SELECT label FROM chats WHERE id = %s", (session['chat_id'],))
         label = cur.fetchone()['label']
         
@@ -76,7 +97,8 @@ def index(data = None):
                            user_id = (session['user_id'] if 'user_id' in session else -1),
                            messages = ret,
                            chat_label = label,
-                           chat_id = (session['chat_id'] if 'chat_id' in session else -1))
+                           chat_id = (session['chat_id'] if 'chat_id' in session else -1),
+                           chatrooms = chatrooms)
 
 
 @socketio.on('send_message')
