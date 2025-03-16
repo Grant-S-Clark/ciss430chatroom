@@ -4,25 +4,38 @@
   {% include 'header.html' %}
   
   <body>
-    <h1>{{ chat_label }}</h1>
-    <br>
-
-    <div class="chat-container" id="chat-window">
-      {% for msg in messages %}
-      <div class="message {% if msg.username == username %}user{%else%}other{%endif%}">
-        <strong>{{ msg.username }}</strong>: {{ msg.message }}
-        <br>
-        <small>{{ msg.time_sent }}</small>
-      </div>
-      {% endfor %}
+    <div class="sidebar">
+      <h3>Your Chatrooms</h3>
+      <ul class="chatroom-list" id="chatroomList">
+        {% for chatroom in chatrooms %}
+            <li class="{% if chatroom.id == chat_id %}active{% endif %}" 
+                onclick="switchChatroom('{{ chatroom.id }}')">
+                {{ chatroom.label }}
+            </li>
+        {% endfor %}
+      </ul>
     </div>
 
-    <form class="message-form" action="index" method="POST">
-      <input type="text" name="message" class="message-input" placeholder="Type your message..." required>
-      <button type="submit" class="send-button">Send</button>
-    </form>
+    <div class="main-content">
+      <h1>{{ chat_label }}</h1>
+      <br>
+      <div class="chat-container" id="chat-window">
+        {% for msg in messages %}
+        <div class="message {% if msg.username == username %}user{%else%}other{%endif%}">
+          <strong>{{ msg.username }}</strong>: {{ msg.message }}
+          <br>
+          <small>{{ msg.time_sent }}</small>
+        </div>
+        {% endfor %}
+      </div>
 
-    {% include 'flash_handler.html' %}
+      <form class="message-form" action="index" method="POST">
+        <input type="text" name="message" class="message-input" placeholder="Type your message..." required>
+        <button type="submit" class="send-button">Send</button>
+      </form>
+
+      {% include 'flash_handler.html' %}
+    </div>
     
   </body>
 </html>
@@ -46,6 +59,11 @@
 <script>
   var socket = io();
   var currentUsername ="{{ username|safe }}"; // Get logged-in user's name from Jinja
+
+  // chatroom switching script
+  function switchChatroom(chatroomId) {
+      window.location.href = `/index?chat_id=${chatroomId}`;
+  }
   
   document.querySelector(".message-form").addEventListener("submit", function (e) {
       e.preventDefault();

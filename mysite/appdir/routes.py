@@ -34,6 +34,9 @@ def handle_error(msg = ERR_MSG):
 def index(data = None):
     if 'user_id' not in session: # not logged in
         return redirect(url_for('login'))
+
+    # Collect the chat id from the request args
+    chat_id = request.args.get('chat_id', default=1, type=int)
     
     conn, cur = db_connect()
     if conn is None:
@@ -50,14 +53,16 @@ def index(data = None):
         # Make sure they are allowed to be in this chatroom.
         # Dont bother for global chat though, but redirect the user
         # to the global chat if they are not allowed in this chatroom.
-        if session['chat_id'] != 1:
+        if chat_id != 1:
             cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
-                        (session['chat_id'], session['user_id']))
+                        (chat_id, session['user_id']))
             # If they do not have permission to be in that chatroom, redirect to global chat.
             if cur.fetchone() is None:
                 flash("Error: You do not have permission to access that chatroom.")
-                session['chat_id'] = 1
+                chat_id = 1
 
+        session['chat_id'] = chat_id
+                
         # Fetch all chatrooms that the user has access to (and grab global because
         # everyone has it).
         cur.execute(

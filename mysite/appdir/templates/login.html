@@ -4,25 +4,27 @@
   {% include 'header.html' %}
 
   <body>
-    <h3>Enter account information:</h3>
-    
-    <form action="login" method="POST">
+    <div class="main-content-login-register">
+      <h3>Enter account information:</h3>
+      
+      <form action="login" method="POST">
 
-      {% include 'flash_handler.html' %}
-      
-      Username:
-      <br>
-      <input name="username" required>
-      <br>
-      
-      Password: <br>
-      <input type="password" name="password" required>
-      <br>
+        {% include 'flash_handler.html' %}
+        
+        Username:
+        <br>
+        <input name="username" required>
+        <br>
+        
+        Password: <br>
+        <input type="password" name="password" required>
+        <br>
 
-      Don't have an account? <a href="register">Register</a>.
-      <br>
-      
-      <button type="submit">Login</button>
-    </form>
+        Don't have an account? <a href="register">Register</a>.
+        <br>
+        
+        <button type="submit">Login</button>
+      </form>
+    </div>
   </body>
 </html>
