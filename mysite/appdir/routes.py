@@ -87,15 +87,18 @@ def index(data = None):
             '''
             SELECT u.username, m.message, m.time_sent, c.label FROM
             messages m
-            JOIN users u ON m.user_id = u.id
-            JOIN chats c ON m.chat_id = %s
+            JOIN users u ON u.id = m.user_id
+            JOIN chats c ON c.id = %s AND m.chat_id = %s
             ORDER BY m.time_sent;
             ''',
-            (session['chat_id'],)
+            (session['chat_id'], session['chat_id'])
         )
         ret = cur.fetchall()
         cur.close()
         conn.close()
+
+        for m in ret:
+            print(m['message'])
                 
     return render_template('index.html',
                            username = (session['username'] if 'username' in session else ''),
