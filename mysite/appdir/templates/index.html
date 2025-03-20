@@ -1,5 +1,10 @@
 <!-- index.html -->
 <html>
+
+  <head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>CISS430 Chatroom</title>
+  </head>
   
   {% include 'header.html' %}
   
@@ -12,7 +17,10 @@
                 onclick="switchChatroom('{{ chatroom.id }}')">
                 {{ chatroom.label }}
             </li>
-        {% endfor %}
+         {% endfor %}
+        <li class="new" onclick="window.location.href = 'chat_type'">
+          New Chat
+        </li>
       </ul>
     </div>
 
@@ -34,6 +42,12 @@
         <button type="submit" class="send-button">Send</button>
       </form>
 
+      {% if chat_type == "DM" %}
+      <form action="close_dm" method="POST" onsubmit="return confirmCloseDM()">
+        <button type="submit" class="close-dm-button">Close DM</button>
+      </form>
+      {% endif %}
+
       {% include 'flash_handler.html' %}
     </div>
     
@@ -49,6 +63,13 @@
   }
   
   scroll_to_bottom();
+</script>
+
+<!-- Deletion confirmations -->
+<script>
+  function confirmCloseDM() {
+    return confirm("Are you sure you want to close this DM? This will delete all messages for both users.");
+}
 </script>
 
 <!-- Scripts for websockets -->
@@ -71,7 +92,7 @@
       var message = messageInput.value.trim();
       var chatId = parseInt("{{ chat_id|safe }}")
       if (message) {
-          socket.emit("send_message", { message: message, chat_id : chatId });
+          socket.emit("send_message", { message: message });
           messageInput.value = "";
       }
   });

@@ -22,23 +22,25 @@ KEY (username)
 
 -- Add chat pictures later?
 CREATE TABLE chats (
-id     INT   AUTO_INCREMENT,
-label  VARCHAR(200) NOT NULL,
+id           INT                           AUTO_INCREMENT,
+label        VARCHAR(200), -- DM labels determined based on user viewing it, so NULL
+chat_type    ENUM('GLOBAL', 'DM', 'GROUP') NOT NULL,
 
 PRIMARY KEY (id)
 ) engine=innodb;
 
 -- Set up global chat by default, id for global is 1.
 ALTER TABLE chats AUTO_INCREMENT = 1;
-INSERT chats (label) VALUES ('Global Chat');
+INSERT chats (label, chat_type) VALUES ('Global Chat', 'GLOBAL');
 
 -- Access permissions for non-global chats.
 CREATE TABLE chat_users (
 chat_id      INT        NOT NULL,
 user_id      INT        NOT NULL,
+time_joined  TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
 
 FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
-FOREIGN KEY (user_id) REFERENCES chats(id) ON DELETE CASCADE
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) engine=innodb;
 
 -- Maybe bigint for id so we dont overflow the id count with a

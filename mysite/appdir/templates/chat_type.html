@@ -1,0 +1,23 @@
+<!-- chat_type.html -->
+<html>
+  <head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='new_chat.css') }}">
+    <title>CISS430 Chatroom</title>
+  </head>
+
+  {% include 'header.html' %}
+
+  <div class="main-content">
+    <h3>Choose Chat Type</h3>
+    
+    <form action="new_dm" method="GET">
+      <button type="submit">New Direct Message</button>
+    </form>
+
+    <form action="new_gc" method="GET">
+      <button type="submit">New Group Chat</button>
+    </form>
+
+    {% include 'flash_handler.html' %}
+  </div>
+</html>

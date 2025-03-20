@@ -43,6 +43,7 @@ def index(data = None):
         handle_error()
         ret = []
         chat_label = ""
+        chat_type = ""
         chatrooms = []
         
     else:
@@ -62,12 +63,14 @@ def index(data = None):
                 chat_id = 1
 
         session['chat_id'] = chat_id
+        cur.execute("SELECT chat_type FROM chats WHERE id = %s", (session['chat_id'],))
+        chat_type = cur.fetchone()['chat_type']
                 
         # Fetch all chatrooms that the user has access to (and grab global because
         # everyone has it).
         cur.execute(
         """
-        SELECT chats.id, chats.label
+        SELECT chats.id, chats.label, chats.chat_type
         FROM chats
         LEFT JOIN chat_users ON chats.id = chat_users.chat_id
         WHERE chats.id = 1 OR chat_users.user_id = %s
@@ -75,12 +78,31 @@ def index(data = None):
         (session['user_id'],)
         )
 
-        # SORT THEM BY CHAT_ID LATER
+        # Sorting by chat id to make sure global chat is always at the top.
         chatrooms = cur.fetchall()
+        chatrooms = sorted(chatrooms, key = lambda chatroom: chatroom['id'])
+        label = None
+
+        # Dynamically determine direct message chat labels
+        for chat in chatrooms:
+            if chat['chat_type'] == 'DM':
+                print(session['chat_id'], session['user_id'])
+                cur.execute(
+                    """
+                    SELECT username FROM users WHERE id =
+                    (SELECT user_id FROM chat_users WHERE chat_id = %s AND user_id != %s)
+                    """,
+                    (chat['id'], session['user_id'])
+                )
+                chat['label'] = cur.fetchone()['username']
+                if chat['id'] == session['chat_id']:
+                    label = chat['label']
                 
         # Fetch the label of the current chatroom (i.e. the name for display)
-        cur.execute("SELECT label FROM chats WHERE id = %s", (session['chat_id'],))
-        label = cur.fetchone()['label']
+        # if it is not already set
+        if label is None:
+            cur.execute("SELECT label FROM chats WHERE id = %s", (session['chat_id'],))
+            label = cur.fetchone()['label']
         
         # Fetch all messages in chatroom
         cur.execute(
@@ -102,10 +124,11 @@ def index(data = None):
                 
     return render_template('index.html',
                            username = (session['username'] if 'username' in session else ''),
-                           user_id = (session['user_id'] if 'user_id' in session else -1),
+                           user_id = session['user_id'],
                            messages = ret,
                            chat_label = label,
-                           chat_id = (session['chat_id'] if 'chat_id' in session else -1),
+                           chat_id = (session['chat_id'] if 'chat_id' in session else 1),
+                           chat_type = chat_type,
                            chatrooms = chatrooms)
 
 
@@ -117,7 +140,7 @@ def handle_message_send(data):
     user_id = session['user_id']
     username = session['username']
     message = data['message']
-    chat_id = data['chat_id']
+    chat_id = session['chat_id']
 
     conn, cur = db_connect()
     if conn is None:
@@ -145,6 +168,131 @@ def handle_message_send(data):
              },
              broadcast=True)
 
+@app.route('/chat_type', methods=['GET'])
+def chat_type():
+    if 'user_id' not in session:
+        flash('You must log in to access that page.')
+        return redirect(url_for('login'))
+    
+    return render_template('chat_type.html',
+                           user_id = session['user_id'])
+
+@app.route('/new_dm', methods=['GET', 'POST'])
+def new_dm():
+    if 'user_id' not in session:
+        flash('You must log in to access that page.')
+        return redirect(url_for('login'))
+
+    if request.method == "POST":
+        selected_user_id = request.form.get("selected_user_id")
+        if not selected_user_id:
+            flash("Please selecte a user.")
+            return redirect(url_for('new_dm'))
+        
+        selected_user_id = int(selected_user_id)
+
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            flash("Something went wrong, please try again.")
+            return redirect(url_for('new_dm'))
+
+        else:
+            # Ensure existence of user
+            cur.execute("SELECT * FROM users WHERE id = %s", (selected_user_id,))
+            if cur.fetchone() is None:
+                flash("Could not find user. Please try again.")
+                return redirect(url_for('new_dm'))
+
+            # Make sure this DM does not already exist
+            cur.execute("""
+            SELECT * FROM chats
+            JOIN chat_users cu1 ON chats.id = cu1.chat_id
+            JOIN chat_users cu2 ON chats.id = cu2.chat_id
+            WHERE chats.chat_type = 'DM'
+            AND cu1.user_id = %s
+            AND cu2.user_id = %s
+            """,
+            (session['user_id'], selected_user_id)
+            )
+            if cur.fetchone() is not None:
+                flash("You already have a direct message open with this user.")
+                return redirect(url_for('new_dm'))
+
+            # Create the DM and redirect the user to it.
+            cur.execute("INSERT chats (label, chat_type) VALUES (NULL, 'DM')")
+            new_chat_id = cur.lastrowid
+            cur.execute("""
+            INSERT chat_users (chat_id, user_id) VALUES
+            (%s, %s),
+            (%s, %s)
+            """,
+            (new_chat_id, session['user_id'], new_chat_id, selected_user_id)
+            )
+            conn.commit()
+
+            return redirect(url_for("index", chat_id = new_chat_id))
+
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        users = []
+    else:
+        cur.execute("SELECT id, username FROM users WHERE id != %s", (session['user_id'],))
+        users = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+    return render_template('new_dm.html',
+                           user_id = session['user_id'],
+                           users = users)
+
+@app.route('/close_dm', methods=['POST'])
+def close_dm():
+    if 'user_id' not in session:
+        flash('You must log in to access that page.')
+        return redirect(url_for('login'))
+
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        return redirect(url_for('index', chat_id = session['chat_id']))
+    else:
+        # Ensure this chat is a DM and you have access to it.
+        cur.execute("SELECT * FROM chats WHERE id = %s AND chat_type = 'DM'",
+                    (session['chat_id'],))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to delete DM. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to delete DM. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        # Delete the DM. Cascade deletes handle the rest.
+        cur.execute("DELETE FROM chats WHERE id = %s", (session['chat_id'],))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+        flash("Direct message chat deleted successfully.")
+        return redirect(url_for('index', chat_id=1))
+
+@app.route('/new_gc', methods=['GET', 'POST'])
+def new_gc():
+    if 'user_id' not in session:
+        flash('You must log in to access that page.')
+        return redirect(url_for('login'))
+
+    return render_template('new_gc.html',
+                           user_id = (session['user_id'] if 'user_id' in session else -1))
+    
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     # logged in users need to log out, send them to index.
@@ -154,9 +302,7 @@ def login():
 
     # Prompt user to log in.
     if request.method == 'GET':
-        return render_template('login.html',
-                               user_id = (session['user_id'] if 'user_id' in session else -1),
-                               username = (session['username'] if 'username' in session else ''))
+        return render_template('login.html', user_id = -1)
 
     # Verify login attempt
     else:
@@ -215,9 +361,7 @@ def register():
         return redirect(url_for('index'))
 
     if request.method == 'GET':
-        return render_template('register.html',
-                               user_id = (session['user_id'] if 'user_id' in session else -1),
-                               username = (session['username'] if 'username' in session else ''))
+        return render_template('register.html', user_id = -1)
 
     else:
         username = request.form['username']

@@ -1,0 +1,40 @@
+<!-- new_dm.html -->
+<html>
+  <head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='new_chat.css') }}">
+    <title>CISS430 Chatroom</title>
+  </head>
+
+  {% include 'header.html' %}
+  
+  <body>
+    <div class="user-sidebar">
+      <h3>Select a User</h3>
+      <ul class="user-list">
+        {% for user in users %}
+        <li id="user-{{ user.id }}" onclick="selectUser('{{ user.id }}')">
+          {{ user.username }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <br>
+    <div class="main-content-sidebar">
+      <form action="new_dm" method="POST">
+        <input type="hidden" name="selected_user_id" id="selected_user">
+        <button type="submit" class="create-chat-btn">Create Direct Message</button>
+      </form>
+
+      {% include 'flash_handler.html' %}
+    </div>
+  </body>
+</html>
+
+<script>
+  function selectUser(userId) {
+      document.getElementById("selected_user").value = userId;
+      document.querySelectorAll(".user-list li").forEach(li => li.classList.remove("selected"));
+      document.getElementById("user-" + userId).classList.add("selected");
+  }
+</script>
