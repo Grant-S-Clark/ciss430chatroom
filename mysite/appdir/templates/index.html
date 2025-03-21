@@ -80,10 +80,15 @@
 <script>
   var socket = io();
   var currentUsername ="{{ username|safe }}"; // Get logged-in user's name from Jinja
+  var currentChatId = "{{ chat_id|safe }}";
 
+  // Join chatroom when page loads.
+  socket.emit("join_chat", {chat_id: currentChatId});
+  
   // chatroom switching script
   function switchChatroom(chatroomId) {
-      window.location.href = `/index?chat_id=${chatroomId}`;
+      socket.emit("leave_chat", { chat_id: currentChatId }); // Leave current chatroom
+      window.location.href = `/index?chat_id=${chatroomId}`; // redirect
   }
   
   document.querySelector(".message-form").addEventListener("submit", function (e) {
@@ -91,20 +96,30 @@
       var messageInput = document.querySelector(".message-input");
       var message = messageInput.value.trim();
       var chatId = parseInt("{{ chat_id|safe }}")
+      
       if (message) {
-          socket.emit("send_message", { message: message });
+          socket.emit("send_message", { message: message, chat_id: chatId });
           messageInput.value = "";
       }
   });
 
   socket.on("receive_message", function (data) {
-      var chatWindow = document.getElementById("chat-window");
+      // Redirect to global chat on permission error.
+      var error = data.error
+      if (error)
+      {
+          switchChatroom(1);
+      }
 
-      var messageClass = (data.username == currentUsername) ? "user" : "other";
-      var newMessage = document.createElement("div");
-      newMessage.classList.add("message", messageClass);
-      newMessage.innerHTML = `<strong>${data.username}</strong>: ${data.message}<br><small>${data.time_sent}</small>`;
-      chatWindow.appendChild(newMessage);
-      chatWindow.scrollTop = chatWindow.scrollHeight;
+      else
+      {
+          var chatWindow = document.getElementById("chat-window");
+          var messageClass = (data.username == currentUsername) ? "user" : "other";
+          var newMessage = document.createElement("div");
+          newMessage.classList.add("message", messageClass);
+          newMessage.innerHTML = `<strong>${data.username}</strong>: ${data.message}<br><small>${data.time_sent}</small>`;
+          chatWindow.appendChild(newMessage);
+          chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
   });
 </script>

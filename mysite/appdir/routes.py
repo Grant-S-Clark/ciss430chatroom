@@ -4,7 +4,7 @@
 
 import sys
 from flask import render_template, session, redirect, url_for, flash, request
-from flask_socketio import emit
+from flask_socketio import emit, join_room, leave_room
 from appdir import app, socketio
 import pymysql
 import hashlib
@@ -28,7 +28,7 @@ def handle_error(msg = ERR_MSG):
     db_error = None
     # LOG ERROR HERE
 
-# Index will be the global chatroom
+# Index will be where users access chatrooms
 @app.route('/')
 @app.route('/index')
 def index(data = None):
@@ -36,7 +36,9 @@ def index(data = None):
         return redirect(url_for('login'))
 
     # Collect the chat id from the request args
-    chat_id = request.args.get('chat_id', default=1, type=int)
+    session['chat_id'] = request.args.get('chat_id', default=1, type=int)
+    if session['chat_id'] is None:
+        session['chat_id'] = 1 if data is None else data['chat_id']
     
     conn, cur = db_connect()
     if conn is None:
@@ -47,22 +49,17 @@ def index(data = None):
         chatrooms = []
         
     else:
-        # Set the current session chat id to either the chat trying to be accessed
-        # or the global chat id if there is not a chat id
-        session['chat_id'] = 1 if data is None else data['chat_id']
-        
         # Make sure they are allowed to be in this chatroom.
         # Dont bother for global chat though, but redirect the user
         # to the global chat if they are not allowed in this chatroom.
-        if chat_id != 1:
+        if session['chat_id'] != 1:
             cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
-                        (chat_id, session['user_id']))
+                        (session['chat_id'], session['user_id']))
             # If they do not have permission to be in that chatroom, redirect to global chat.
             if cur.fetchone() is None:
                 flash("Error: You do not have permission to access that chatroom.")
-                chat_id = 1
+                session['chat_id'] = 1
 
-        session['chat_id'] = chat_id
         cur.execute("SELECT chat_type FROM chats WHERE id = %s", (session['chat_id'],))
         chat_type = cur.fetchone()['chat_type']
                 
@@ -127,7 +124,7 @@ def index(data = None):
                            user_id = session['user_id'],
                            messages = ret,
                            chat_label = label,
-                           chat_id = (session['chat_id'] if 'chat_id' in session else 1),
+                           chat_id = session['chat_id'],
                            chat_type = chat_type,
                            chatrooms = chatrooms)
 
@@ -146,6 +143,28 @@ def handle_message_send(data):
     if conn is None:
         handle_error()
     else:
+        # Check to make sure you can send a message to this chat.
+        if chat_id != 1:
+            cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                        (chat_id, user_id))
+            if cur.fetchone() is None:
+                cur.close()
+                conn.close()
+
+                # This flash wont show up?
+                flash("Error: You do not have permission to access that chatroom.")
+            
+                # Broadcast an error to redirect to global chat.
+                emit('receive_message',
+                     {'username': username,
+                      'message': message,
+                      'time_sent': '',
+                      'error': True
+                     },
+                     room=request.sid) # Only send error to the sender's socket.
+                return
+
+        # Put message into the chatroom.
         cur.execute("INSERT INTO messages (user_id, chat_id, message) VALUES (%s, %s, %s)",
                     (user_id, chat_id, message))
         conn.commit()
@@ -164,10 +183,25 @@ def handle_message_send(data):
         emit('receive_message',
              {'username': username,
               'message': message,
-              'time_sent': time_sent
+              'time_sent': time_sent,
+              'error': False
              },
-             broadcast=True)
+             room=f"chat_{chat_id}")
 
+    return
+
+@socketio.on('join_chat')
+def handle_join_chat(data):
+    chat_id = data.get("chat_id")
+    if chat_id:
+        join_room(f"chat_{chat_id}")
+
+@socketio.on('leave_chat')
+def handle_join_chat(data):
+    chat_id = data.get("chat_id")
+    if chat_id:
+        leave_room(f"chat_{chat_id}")    
+    
 @app.route('/chat_type', methods=['GET'])
 def chat_type():
     if 'user_id' not in session:
@@ -282,7 +316,18 @@ def close_dm():
         cur.close()
         conn.close()
         flash("Direct message chat deleted successfully.")
-        return redirect(url_for('index', chat_id=1))
+        
+        # Kick everyone out by broadcasting an error to them all
+        socketio.emit('receive_message',
+                      {'username': '',
+                       'message': '',
+                       'time_sent': '',
+                       'error': True
+                      },
+                      room=f"chat_{session['chat_id']}")
+
+        # Redirect
+        return redirect(url_for('index'))
 
 @app.route('/new_gc', methods=['GET', 'POST'])
 def new_gc():

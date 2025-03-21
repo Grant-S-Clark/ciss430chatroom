@@ -20,6 +20,12 @@ PRIMARY KEY (id),
 KEY (username)
 ) engine=innodb;
 
+-- TEST USERS, DELETE LATER
+INSERT INTO users (email, username, salt, hpassword) VALUES
+('test@gmail.com', 'test', 'S4k=?lCCtmV~)gM]y\\-vHHV"', '69dbe8097d772c70139e7385875bd7f75775b852d41cf6a08ea43b586d6df9a8'),
+('test@gmail.com', 'test2', 'aIh9.sI^[--g.q4qFSg2A7sv', 'f7776285e22963da2563dc60a943187ce4c67b7082541fddccd3e7adc86027f2'),
+('test@gmail.com', 'test3', 'Q^N=m>k@~7pz`i]u2@ZFB[Z3', '187253f179ef370f01a723d2b2a78cd5260994b490ce16a187df886fe958ffdd');
+
 -- Add chat pictures later?
 CREATE TABLE chats (
 id           INT                           AUTO_INCREMENT,
