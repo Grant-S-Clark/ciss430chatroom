@@ -1,6 +1,8 @@
 # File: flask_app.py
 
 from appdir import app, socketio
+import eventlet
+eventlet.monkey_patch()
 
 app.jinja_env.auto_reload = True
 app.config['DEBUG'] = True

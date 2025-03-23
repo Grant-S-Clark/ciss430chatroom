@@ -46,6 +46,8 @@ def index(data = None):
         ret = []
         chat_label = ""
         chat_type = ""
+        is_owner = False
+        gc_members = []
         chatrooms = []
         
     else:
@@ -62,6 +64,26 @@ def index(data = None):
 
         cur.execute("SELECT chat_type FROM chats WHERE id = %s", (session['chat_id'],))
         chat_type = cur.fetchone()['chat_type']
+
+        # Grab group chat information
+        if chat_type == "GROUP":
+            cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                        (session['chat_id'], session['user_id']))
+            if cur.fetchone() is None:
+                is_owner = False
+            else:
+                is_owner = True
+
+            cur.execute("""
+            SELECT username FROM users
+            JOIN chat_users ON user_id = users.id AND chat_id = %s
+            """,
+            (session['chat_id'],)
+            )
+            gc_members = cur.fetchall()
+        else:
+            is_owner = False
+            gc_members = []
                 
         # Fetch all chatrooms that the user has access to (and grab global because
         # everyone has it).
@@ -71,19 +93,16 @@ def index(data = None):
         FROM chats
         LEFT JOIN chat_users ON chats.id = chat_users.chat_id
         WHERE chats.id = 1 OR chat_users.user_id = %s
+        ORDER BY chats.id
         """,
         (session['user_id'],)
         )
-
-        # Sorting by chat id to make sure global chat is always at the top.
         chatrooms = cur.fetchall()
-        chatrooms = sorted(chatrooms, key = lambda chatroom: chatroom['id'])
         label = None
 
         # Dynamically determine direct message chat labels
         for chat in chatrooms:
             if chat['chat_type'] == 'DM':
-                print(session['chat_id'], session['user_id'])
                 cur.execute(
                     """
                     SELECT username FROM users WHERE id =
@@ -115,9 +134,6 @@ def index(data = None):
         ret = cur.fetchall()
         cur.close()
         conn.close()
-
-        for m in ret:
-            print(m['message'])
                 
     return render_template('index.html',
                            username = (session['username'] if 'username' in session else ''),
@@ -126,6 +142,8 @@ def index(data = None):
                            chat_label = label,
                            chat_id = session['chat_id'],
                            chat_type = chat_type,
+                           is_owner = is_owner,
+                           gc_members = gc_members,
                            chatrooms = chatrooms)
 
 
@@ -172,6 +190,11 @@ def handle_message_send(data):
         cur.execute("SELECT time_sent FROM messages WHERE user_id=%s AND chat_id=%s ORDER BY time_sent DESC LIMIT 1",
                     (user_id, chat_id))
         res = cur.fetchone()
+
+        # Get list of recipients, this is to make sure users within a group chat that they
+        # were just removed from will not get any messages delivered to them
+        cur.execute("SELECT user_id FROM chat_users WHERE chat_id = %s", (chat_id,))
+        user_ids = [ result['user_id'] for result in cur.fetchall() ]
         cur.close()
         conn.close()
 
@@ -184,6 +207,7 @@ def handle_message_send(data):
              {'username': username,
               'message': message,
               'time_sent': time_sent,
+              'recipients': user_ids,
               'error': False
              },
              room=f"chat_{chat_id}")
@@ -235,6 +259,8 @@ def new_dm():
             # Ensure existence of user
             cur.execute("SELECT * FROM users WHERE id = %s", (selected_user_id,))
             if cur.fetchone() is None:
+                cur.close()
+                conn.close()
                 flash("Could not find user. Please try again.")
                 return redirect(url_for('new_dm'))
 
@@ -250,6 +276,8 @@ def new_dm():
             (session['user_id'], selected_user_id)
             )
             if cur.fetchone() is not None:
+                cur.close()
+                conn.close()
                 flash("You already have a direct message open with this user.")
                 return redirect(url_for('new_dm'))
 
@@ -265,6 +293,9 @@ def new_dm():
             )
             conn.commit()
 
+            cur.close()
+            conn.close()
+            flash("Direct message created successfully.")
             return redirect(url_for("index", chat_id = new_chat_id))
 
     conn, cur = db_connect()
@@ -298,7 +329,7 @@ def close_dm():
         if cur.fetchone() is None:
             cur.close()
             conn.close()
-            flash("Error encountered trying to delete DM. Please try again later.")
+            flash("Error encountered trying to delete direct message chatroom. Please try again later.")
             return redirect(url_for('index', chat_id = session['chat_id']))
 
         cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
@@ -335,9 +366,346 @@ def new_gc():
         flash('You must log in to access that page.')
         return redirect(url_for('login'))
 
+    if request.method == "POST":
+        group_name = request.form.get("group_name").strip()
+        if group_name == "Global Chat":
+            flash('You cannot make a chatroom named "Global Chat", please choose another name.')
+            return redirect(url_for('new_gc'))
+        
+        user_ids = request.form.get("selected_users")
+        if len(user_ids) == 0:
+            user_ids = []
+        else:
+            user_ids = [ int(id_str) for id_str in user_ids.split(',') ]
+            
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            cur.close()
+            conn.close()
+            flash("Something went wrong, please try again.")
+            return redirect(url_for('new_gc'))
+        else:
+            # Ensure all users exist
+            for uid in user_ids:
+                cur.execute("SELECT * FROM users WHERE id = %s", (uid,))
+                if cur.fetchone() is None:
+                    cur.close()
+                    conn.close()
+                    flash("Could not find one or more users. Please try again.")
+                    return redirect(url_for('new_gc'))
+
+            # Create the DM and mark the current user ID as the owner.
+            cur.execute("INSERT chats (label, chat_type) VALUES (%s, 'GROUP')", (group_name,))
+            new_chat_id = cur.lastrowid
+            cur.execute("INSERT chat_users (chat_id, user_id) VALUES (%s, %s)",
+                        (new_chat_id, session['user_id']))
+            cur.execute("INSERT group_chat_owners (chat_id, user_id) VALUES (%s, %s)",
+                        (new_chat_id, session['user_id']))
+
+            # Add other users into the chat.
+            for uid in user_ids:
+                cur.execute("INSERT chat_users (chat_id, user_id) VALUES (%s, %s)",
+                            (new_chat_id, uid))
+
+            conn.commit()
+
+            cur.close()
+            conn.close()
+
+            flash("Group created successfully.")
+            return redirect(url_for("index", chat_id = new_chat_id))
+            
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        users = []
+    else:
+        cur.execute("SELECT id, username FROM users WHERE id != %s", (session['user_id'],))
+        users = cur.fetchall()
+        cur.close()
+        conn.close()
+        
     return render_template('new_gc.html',
-                           user_id = (session['user_id'] if 'user_id' in session else -1))
-    
+                           user_id = session['user_id'],
+                           users = users)
+
+# ADD USERS FUNCTION
+@app.route('/add_gc_members', methods=['GET', 'POST'])
+def add_gc_members():
+
+    if request.method == 'POST':
+        user_ids = request.form.get("selected_users")
+        if len(user_ids) == 0:
+            return redirect(url_for("index", chat_id = session['chat_id'])) # Nothing to do
+        else:
+            user_ids = [ int(id_str) for id_str in user_ids.split(',') ]
+            
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            users = []
+        else:
+            # Assure this is the chatroom owner
+            cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                        (session['chat_id'], session['user_id']))
+            if cur.fetchone() is None:
+                cur.close()
+                conn.close()
+                flash("You do not have permission to visit that page.")
+                return redirect(url_for("index", chat_id = session['chat_id']))
+
+            # Ensure all users exist
+            for uid in user_ids:
+                cur.execute("SELECT * FROM users WHERE id = %s", (uid,))
+                if cur.fetchone() is None:
+                    cur.close()
+                    conn.close()
+                    flash("Could not find one or more users. Please try again.")
+                    return redirect(url_for('add_gc_members'))
+                
+            # Add users into the chat.
+            for uid in user_ids:
+                cur.execute("INSERT chat_users (chat_id, user_id) VALUES (%s, %s)",
+                            (session['chat_id'], uid))
+
+            conn.commit()
+
+            cur.close()
+            conn.close()
+
+            flash("Members added successfully.")
+            return redirect(url_for("index", chat_id = session['chat_id']))
+        
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        users = []
+    else:
+        # Assure this is the chatroom owner
+        cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("You do not have permission to visit that page.")
+            return redirect(url_for("index", chat_id = session['chat_id']))
+        
+        # Get all users not in this chatroom
+        cur.execute(
+        """
+        SELECT id, username FROM users
+        WHERE id NOT IN (SELECT user_id FROM chat_users WHERE chat_id = %s)
+        """,
+        (session['chat_id'],))
+        users = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+    return render_template('add_gc_members.html',
+                           user_id = session['user_id'],
+                           users = users)
+
+@app.route('/remove_gc_members', methods=['GET', 'POST'])
+def remove_gc_members():
+
+    if request.method == 'POST':
+        user_ids = request.form.get("selected_users")
+        if len(user_ids) == 0:
+            return redirect(url_for("index", chat_id = session['chat_id'])) # Nothing to do
+        else:
+            user_ids = [ int(id_str) for id_str in user_ids.split(',') ]
+            
+        conn, cur = db_connect()
+        if conn is None:
+            handle_error()
+            users = []
+        else:
+            # Assure this is the chatroom owner
+            cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                        (session['chat_id'], session['user_id']))
+            if cur.fetchone() is None:
+                cur.close()
+                conn.close()
+                flash("You do not have permission to visit that page.")
+                return redirect(url_for("index", chat_id = session['chat_id']))
+
+            # Ensure all users exist
+            for uid in user_ids:
+                cur.execute("SELECT * FROM users WHERE id = %s", (uid,))
+                if cur.fetchone() is None:
+                    cur.close()
+                    conn.close()
+                    flash("Could not find one or more users. Please try again.")
+                    return redirect(url_for('add_gc_members'))
+                
+            # Remove users from the chatroom
+            for uid in user_ids:
+                cur.execute("DELETE FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                            (session['chat_id'], uid))
+
+            conn.commit()
+
+            cur.close()
+            conn.close()
+            
+            # Kick the members out of the chatroom if they are in it.
+            for uid in user_ids:
+                socketio.emit("removed_from_group",
+                              {'chat_id' : session['chat_id']},
+                              room=f"user_{uid}")
+                print("BROADCASTED ON", f"user_{uid}")
+                
+            flash("Members removed successfully.")
+            return redirect(url_for("index", chat_id = session['chat_id']))
+        
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        users = []
+    else:
+        # Assure this is the chatroom owner
+        cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("You do not have permission to visit that page.")
+            return redirect(url_for("index", chat_id = session['chat_id']))
+        
+        # Get all users in the chatroom
+        cur.execute(
+        """
+        SELECT id, username FROM users
+        WHERE id IN (SELECT user_id FROM chat_users WHERE chat_id = %s AND user_id != %s)
+        """,
+        (session['chat_id'], session['user_id']))
+        users = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+    return render_template('remove_gc_members.html',
+                           user_id = session['user_id'],
+                           users = users)
+
+@app.route('/leave_gc', methods=['POST'])
+def leave_gc():
+    if 'user_id' not in session:
+        flash('You must log in to access that page.')
+        return redirect(url_for('login'))
+
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        return redirect(url_for('index', chat_id = session['chat_id']))
+    else:
+        # Ensure this chat is a group chat and you have access to it.
+        cur.execute("SELECT * FROM chats WHERE id = %s AND chat_type = 'GROUP'",
+                    (session['chat_id'],))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to leave group message chatroom. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to leave group message chatroom. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        # Handle ownership transfer
+        cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is not None:
+            cur.execute("""
+            SELECT u.id FROM users AS u
+            JOIN chat_users AS cu ON cu.user_id = u.id AND cu.chat_id = %s
+            WHERE u.id != %s
+            ORDER BY cu.time_joined LIMIT 1
+            """,
+            (session['chat_id'], session['user_id']))
+            next_owner = cur.fetchone()
+            if next_owner is None:
+                cur.close()
+                conn.close()
+                flash("Cannot leave chat as last member. You must delete this chat.")
+                return redirect(url_for('index', chat_id = session['chat_id']))
+
+            cur.execute("UPDATE group_chat_owners SET user_id = %s WHERE chat_id = %s",
+                        (next_owner['id'], session['chat_id']))
+            
+        # Remove session's user_id from the chat's access permissions.
+        cur.execute("DELETE FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+        flash("Left group successfully.")
+
+        # Redirect self to global chat
+        return redirect(url_for('index'))
+
+@app.route('/close_gc', methods=['POST'])
+def close_gc():
+    if 'user_id' not in session:
+        flash('You must log in to access that page.')
+        return redirect(url_for('login'))
+
+    conn, cur = db_connect()
+    if conn is None:
+        handle_error()
+        return redirect(url_for('index', chat_id = session['chat_id']))
+    else:
+        # Ensure this chat is a group chat and you have access to it.
+        cur.execute("SELECT * FROM chats WHERE id = %s AND chat_type = 'GROUP'",
+                    (session['chat_id'],))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to delete group message chatroom. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        cur.execute("SELECT * FROM chat_users WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to delete group message chatroom. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        # Ensure you are the group owner and can delete it.
+        cur.execute("SELECT * FROM group_chat_owners WHERE chat_id = %s AND user_id = %s",
+                    (session['chat_id'], session['user_id']))
+        if cur.fetchone() is None:
+            cur.close()
+            conn.close()
+            flash("Error encountered trying to delete group message chatroom. Please try again later.")
+            return redirect(url_for('index', chat_id = session['chat_id']))
+
+        # Delete the group chat. Cascade deletes handle the rest.
+        cur.execute("DELETE FROM chats WHERE id = %s", (session['chat_id'],))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+        flash("Group chat deleted successfully.")
+        
+        # Kick everyone out by broadcasting an error to them all
+        socketio.emit('receive_message',
+                      {'username': '',
+                       'message': '',
+                       'time_sent': '',
+                       'error': True
+                      },
+                      room=f"chat_{session['chat_id']}")
+
+        # Redirect
+        return redirect(url_for('index'))
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     # logged in users need to log out, send them to index.
@@ -462,12 +830,9 @@ def register():
         ret = cur.fetchone()
         cur.close()
         conn.close()
-
-        session['user_id'] = ret['id']
-        session['username'] = username
         
         flash("Registration successful")
-        return redirect(url_for('index'))
+        return redirect(url_for('login'))
     
 @app.route('/logout')
 def logout():

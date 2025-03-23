@@ -39,7 +39,7 @@
     height: calc(100vh - 60px - 10px);
     background-color: #555;
     color: white;
-    overflow-y: auto;
+    overflow-y: hidden;
 }
 
 /* Sidebar heading */
@@ -56,6 +56,8 @@
     padding-left: 5px;
     padding-right: 5px;
     margin: 0;
+    overflow-y: auto;
+    max-height: calc(100vh - 200px);
 }
 
 /* Individual user item */
@@ -76,6 +78,10 @@
 /* Selected user */
 .user-list li.selected {
     background-color: #0084ff;
+}
+
+.user-list li.selected-red {
+    background-color: #ff4444;
 }
 
 .create-chat-btn {

@@ -1,4 +1,4 @@
-<!-- new_gc.html -->
+<!-- remove_gc_members.html -->
 <html>
   <head>
     <link rel="stylesheet" href="{{ url_for('static', filename='new_chat.css') }}">
@@ -21,13 +21,9 @@
 
     <br>
     <div class="main-content-sidebar">
-      <form action="new_gc" method="POST">
+      <form action="remove_gc_members" method="POST">
         <input type="hidden" name="selected_users" id="selected_users">
-        <label for="group_name">Group Name:</label>
-        <input type="text" name="group_name" id="group_name" required>
-        <br>
-        <br>
-        <button type="submit" class="create-chat-btn">Create Group Chat</button>
+        <button type="submit" class="create-chat-btn">Remove Users</button>
       </form>
 
       {% include 'flash_handler.html' %}
@@ -42,12 +38,12 @@
       if (selectedUsers.has(userId))
       {
           selectedUsers.delete(userId);
-          document.getElementById("user-" + userId).classList.remove("selected");
+          document.getElementById("user-" + userId).classList.remove("selected-red");
       }
       else
       {
           selectedUsers.add(userId);
-          document.getElementById("user-" + userId).classList.add("selected");
+          document.getElementById("user-" + userId).classList.add("selected-red");
       }
 
       // Turn the set into a list of comma separated user ids

@@ -49,6 +49,14 @@ FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) engine=innodb;
 
+CREATE TABLE group_chat_owners (
+chat_id      INT        NOT NULL UNIQUE,
+user_id      INT        NOT NULL,
+
+FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+FOREIGN KEY (user_id) REFERENCES users(id) -- user deletion will need to be handled manually
+);
+
 -- Maybe bigint for id so we dont overflow the id count with a
 -- huge number of messages?
 CREATE TABLE messages (

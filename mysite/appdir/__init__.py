@@ -9,6 +9,6 @@ from flask_socketio import SocketIO
 
 app = Flask(__name__)
 app.secret_key = "SECRETKEYTEMPORARYSTRING"
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 from appdir import routes
